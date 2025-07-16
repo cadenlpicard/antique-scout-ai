@@ -17,12 +17,38 @@ from bs4 import BeautifulSoup
 import re
 import sys
 import json
+import os
 from datetime import datetime, timedelta
 from typing import List, Dict
 import urllib.parse
 import time
+# Import geocode function
+from geocode import geocode
 
 class WorkingSaleScraper:
+    # Load Craigslist region/city/zipcode mapping from external JSON file
+    with open(os.path.join(os.path.dirname(__file__), "craigslist_regions.json"), "r") as f:
+        CRAIGSLIST_REGION_DATA = json.load(f)
+
+    def get_craigslist_region(self, location: str) -> str:
+        """
+        Translate a city name or ZIP code to a Craigslist region using external mapping.
+        """
+        loc = location.strip().lower()
+        # Check all regions
+        for region, data in self.CRAIGSLIST_REGION_DATA.items():
+            # Check cities
+            if "cities" in data:
+                for city in data["cities"]:
+                    if loc == city.lower():
+                        return region
+            # Check zipcodes
+            if "zipcodes" in data:
+                for zipcode in data["zipcodes"]:
+                    if loc == zipcode:
+                        return region
+        print(f"Craigslist region for '{location}' not found. Defaulting to 'sfbay'.")
+        return 'sfbay'
     """Scraper for real garage sale and estate sale data."""
 
     def __init__(self):
@@ -36,58 +62,60 @@ class WorkingSaleScraper:
             'Upgrade-Insecure-Requests': '1',
         })
 
+    def add_geocode(self, listings: List[Dict[str, str]]):
+        """Add latitude and longitude to each listing if possible."""
+        for listing in listings:
+            address = listing.get('location')
+            if address:
+                lat, lon = geocode(address)
+                listing['latitude'] = str(lat) if lat is not None else ''
+                listing['longitude'] = str(lon) if lon is not None else ''
+        return listings
+
     def search_facebook_marketplace(self, location: str, limit: int = 10) -> List[Dict[str, str]]:
         """
-        Search Facebook Marketplace for garage sales and estate sales.
+        Placeholder for Facebook Marketplace. No public API is available.
         """
+        print("Facebook Marketplace scraping is not supported due to ToS and technical limitations.")
+        print("Consider using Craigslist and estate sale company sites for real data.")
+        return []
+
+    def search_craigslist(self, location: str, limit: int = 10) -> List[Dict[str, str]]:
+        """
+        Search Craigslist garage/estate sales using RSS feeds. Accepts city name or ZIP code.
+        """
+        region = self.get_craigslist_region(location)
+        print(f"Searching Craigslist for sales in {location} (region: {region})...")
+        listings = []
+        rss_url = f"https://{region}.craigslist.org/search/gms?format=rss"
         try:
-            print(f"Searching Facebook Marketplace for sales in {location}...")
-            search_terms = ["garage sale", "estate sale", "moving sale", "yard sale"]
-            all_listings = []
-            for term in search_terms:
-                print(f"  Searching for '{term}'...")
-                addresses = [
-                    "1234 Oak Street, San Francisco, CA 94102",
-                    "5678 Maple Avenue, Oakland, CA 94610",
-                    "9012 Pine Road, Berkeley, CA 94720",
-                    "3456 Elm Drive, Palo Alto, CA 94301"
-                ]
-                descriptions = [
-                    "Huge multi-family garage sale! Furniture, electronics, books, clothes, kitchen items, and much more. Everything must go!",
-                    "Estate sale featuring antique furniture, vintage collectibles, fine china, jewelry, and household items. Preview Friday 9-5pm.",
-                    "Moving sale - downsizing after 30 years. Tools, appliances, outdoor furniture, sporting goods, and home decor.",
-                    "Annual neighborhood garage sale with 15+ families participating. Something for everyone - toys, books, clothes, furniture."
-                ]
-                mock_response = {
-                    'data': [
-                        {
-                            'id': f'fb_{term.replace(" ", "_")}_{i}',
-                            'title': f'{term.title()} - {addresses[i % len(addresses)].split(",")[1].strip()}',
-                            'location': addresses[i % len(addresses)],
-                            'description': descriptions[i % len(descriptions)],
-                            'price': f'${(i+1)*10}-{(i+1)*50}',
-                            'date': (datetime.now() + timedelta(days=i)).strftime('%Y-%m-%d'),
-                            'url': f'https://facebook.com/marketplace/item/{i}'
-                        }
-                        for i in range(2)  # 2 results per search term
-                    ]
-                }
-                for item in mock_response['data']:
-                    all_listings.append({
-                        'title': item['title'],
-                        'location': item['location'],
-                        'description': item['description'],
-                        'date': item['date'],
-                        'price': item['price'],
-                        'link': item['url'],
-                        'source': 'Facebook Marketplace'
-                    })
-                if len(all_listings) >= limit:
-                    break
-            print(f"Found {len(all_listings)} Facebook Marketplace listings")
-            return all_listings[:limit]
+            resp = self.session.get(rss_url, timeout=10)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.content, features="xml")
+            items = soup.find_all('item')
+            for item in items[:limit]:
+                title_tag = item.find_next('title')
+                link_tag = item.find_next('link')
+                desc_tag = item.find_next('description')
+                date_tag = item.find_next('dc:date')
+                title = title_tag.text if title_tag else 'No Title'
+                link = link_tag.text if link_tag else ''
+                description = desc_tag.text if desc_tag else ''
+                date = date_tag.text if date_tag else ''
+                listings.append({
+                    'title': title,
+                    'location': location,
+                    'description': description,
+                    'date': date,
+                    'price': '',
+                    'link': link,
+                    'source': 'Craigslist'
+                })
+            print(f"Found {len(listings)} Craigslist listings")
+            listings = self.add_geocode(listings)
+            return listings
         except Exception as e:
-            print(f"Error searching Facebook Marketplace: {e}")
+            print(f"Error searching Craigslist: {e}")
             return []
 
     def search_local_newspapers(self, city: str, state: str = "", limit: int = 10) -> List[Dict[str, str]]:
@@ -129,6 +157,7 @@ class WorkingSaleScraper:
                     print(f"Error accessing {site}: {e}")
                     continue
             print(f"Found {len(listings)} local newspaper listings")
+            listings = self.add_geocode(listings)
             return listings[:limit]
         except Exception as e:
             print(f"Error searching local newspapers: {e}")
@@ -136,50 +165,44 @@ class WorkingSaleScraper:
 
     def search_estate_sale_companies(self, zip_code: str, limit: int = 10) -> List[Dict[str, str]]:
         """
-        Search estate sale company websites for upcoming sales.
+        Scrape EstateSales.org for estate sales by ZIP code.
         """
+        print(f"Searching EstateSales.org for estate sales near {zip_code}...")
+        listings = []
+        url = f"https://estatesales.org/estate-sales?search_zip={zip_code}&search_distance=25"
         try:
-            print(f"Searching estate sale companies near {zip_code}...")
-            companies = [
-                "EstateSales.org",
-                "MaxSold.com",
-                "AuctionZip.com",
-                "LocalEstateSales.com"
-            ]
-            listings = []
-            for company in companies:
-                try:
-                    addresses = [
-                        f"123 Oakwood Drive, {zip_code}",
-                        f"567 Magnolia Court, {zip_code}",
-                        f"890 Willowbrook Lane, {zip_code}",
-                        f"234 Cedar Heights, {zip_code}"
-                    ]
-                    descriptions = [
-                        f"Complete estate liquidation by {company}. Beautiful home filled with quality furniture, artwork, jewelry, china, glassware, linens, and collectibles. Three-day sale with something for everyone.",
-                        f"Upscale estate sale conducted by {company}. Designer furniture, Oriental rugs, fine art, sterling silver, crystal, and luxury household items. Professional organization and pricing.",
-                        f"Large estate sale by {company} featuring mid-century modern furniture, vintage electronics, books, records, tools, and garden items. Well-organized sale with fair prices.",
-                        f"Multi-generational estate sale by {company}. Antiques, vintage items, modern furniture, appliances, clothing, and miscellaneous household goods. Cash and credit cards accepted."
-                    ]
-                    sample_listings = [
-                        {
-                            'title': f'Estate Sale - {company}',
-                            'location': addresses[companies.index(company) % len(addresses)],
-                            'description': descriptions[companies.index(company) % len(descriptions)],
-                            'date': (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'),
-                            'price': '$1-1000',
-                            'link': f'https://www.{company.lower()}/sales/{zip_code}',
-                            'source': company
-                        }
-                    ]
-                    listings.extend(sample_listings)
-                except Exception as e:
-                    print(f"Error accessing {company}: {e}")
-                    continue
+            resp = self.session.get(url, timeout=10)
+            resp.raise_for_status()
+            soup = BeautifulSoup(resp.text, "html.parser")
+            sales = soup.select(".sale-listing")
+            for sale in sales[:limit]:
+                title_elem = sale.select_one(".sale-title")
+                address_elem = sale.select_one(".sale-address")
+                date_elem = sale.select_one(".sale-dates")
+                link_elem = sale.select_one("a")
+                desc_elem = sale.select_one(".sale-description")
+                title = title_elem.get_text(strip=True) if title_elem else "Estate Sale"
+                address = address_elem.get_text(strip=True) if address_elem else zip_code
+                date = date_elem.get_text(strip=True) if date_elem else ""
+                link = link_elem['href'] if link_elem and link_elem.has_attr('href') else url
+                description = desc_elem.get_text(strip=True) if desc_elem else ""
+                link_str = str(link)
+                if not link_str.startswith("http"):
+                    link = f"https://estatesales.org{link_str}"
+                listings.append({
+                    'title': title,
+                    'location': address,
+                    'description': description,
+                    'date': date,
+                    'price': '',
+                    'link': link,
+                    'source': 'EstateSales.org'
+                })
             print(f"Found {len(listings)} estate sale company listings")
-            return listings[:limit]
+            listings = self.add_geocode(listings)
+            return listings
         except Exception as e:
-            print(f"Error searching estate sale companies: {e}")
+            print(f"Error searching EstateSales.org: {e}")
             return []
 
     def search_nextdoor_sales(self, location: str, limit: int = 10) -> List[Dict[str, str]]:
@@ -261,7 +284,7 @@ def main():
     print("Working Garage Sale & Estate Sale Finder")
     print("=" * 60)
     print("This script searches for real garage sales and estate sales from:")
-    print("1. Facebook Marketplace")
+    print("1. Craigslist")
     print("2. Local newspaper classifieds")
     print("3. Estate sale companies")
     print("4. Nextdoor neighborhood sales\n")
@@ -283,16 +306,14 @@ def main():
         elif len(arg) == 2 and arg.isalpha():
             # State code provided
             print(f"Searching for sales in state: {arg.upper()}")
-            fb_listings = scraper.search_facebook_marketplace(arg.upper(), limit=5)
-            all_listings.extend(fb_listings)
             newspaper_listings = scraper.search_local_newspapers("Major City", arg.upper(), limit=3)
             all_listings.extend(newspaper_listings)
 
         else:
             # City name provided
             print(f"Searching for sales in city: {arg}")
-            fb_listings = scraper.search_facebook_marketplace(arg, limit=4)
-            all_listings.extend(fb_listings)
+            craigslist_listings = scraper.search_craigslist(arg, limit=10)
+            all_listings.extend(craigslist_listings)
             newspaper_listings = scraper.search_local_newspapers(arg, limit=3)
             all_listings.extend(newspaper_listings)
             nextdoor_listings = scraper.search_nextdoor_sales(arg, limit=2)
@@ -301,8 +322,8 @@ def main():
     else:
         # Default search
         print("Performing comprehensive search...")
-        fb_listings = scraper.search_facebook_marketplace("San Francisco", limit=3)
-        all_listings.extend(fb_listings)
+        craigslist_listings = scraper.search_craigslist("San Francisco", limit=10)
+        all_listings.extend(craigslist_listings)
         newspaper_listings = scraper.search_local_newspapers("San Francisco", "CA", limit=3)
         all_listings.extend(newspaper_listings)
         estate_listings = scraper.search_estate_sale_companies("94102", limit=3)
@@ -322,7 +343,6 @@ def main():
     print("3. Search by city: python working_sale_scraper.py 'San Francisco'")
     print("4. Comprehensive search: python working_sale_scraper.py")
     print("\nTo get real data, you'll need to:")
-    print("- Set up Facebook Graph API access")
     print("- Configure local newspaper website scraping")
     print("- Connect to estate sale company APIs")
     print("- Set up Nextdoor API access")

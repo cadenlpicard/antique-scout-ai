@@ -1,0 +1,82 @@
+{
+  "sfbay": {
+    "cities": ["san francisco", "oakland", "berkeley", "san jose", "fremont", "hayward"],
+    "zipcodes": ["94102", "94610", "94720", "95110", "94536", "94541"]
+  },
+  "newyork": {
+    "cities": ["new york", "brooklyn", "manhattan", "queens", "bronx", "staten island"],
+    "zipcodes": ["10001", "11201", "10451", "11354", "10301"]
+  },
+  "chicago": {
+    "cities": ["chicago", "evanston", "oak park", "skokie", "naperville"],
+    "zipcodes": ["60601", "60201", "60301", "60076", "60540"]
+  },
+  "losangeles": {
+    "cities": ["los angeles", "hollywood", "pasadena", "burbank", "long beach"],
+    "zipcodes": ["90001", "90028", "91101", "91502", "90802"]
+  },
+  "seattle": {
+    "cities": ["seattle", "bellevue", "redmond", "kirkland", "tacoma"],
+    "zipcodes": ["98101", "98004", "98052", "98033", "98402"]
+  },
+  "boston": {
+    "cities": ["boston", "cambridge", "somerville", "brookline", "quincy"],
+    "zipcodes": ["02108", "02139", "02143", "02446", "02169"]
+  },
+  "houston": {
+    "cities": ["houston", "sugar land", "pasadena", "baytown", "spring"],
+    "zipcodes": ["77001", "77478", "77502", "77520", "77373"]
+  },
+  "dallas": {
+    "cities": ["dallas", "plano", "irving", "garland", "arlington"],
+    "zipcodes": ["75201", "75024", "75038", "75040", "76010"]
+  },
+  "austin": {
+    "cities": ["austin", "round rock", "cedar park", "georgetown", "san marcos"],
+    "zipcodes": ["78701", "78664", "78613", "78626", "78666"]
+  },
+  "portland": {
+    "cities": ["portland", "beaverton", "gresham", "hillsboro", "tigard"],
+    "zipcodes": ["97201", "97005", "97030", "97123", "97223"]
+  },
+  "miami": {
+    "cities": ["miami", "hialeah", "coral gables", "homestead", "miami beach"],
+    "zipcodes": ["33101", "33010", "33134", "33030", "33139"]
+  },
+  "atlanta": {
+    "cities": ["atlanta", "marietta", "decatur", "smyrna", "roswell"],
+    "zipcodes": ["30301", "30060", "30030", "30080", "30075"]
+  },
+  "denver": {
+    "cities": ["denver", "aurora", "lakewood", "thornton", "westminster"],
+    "zipcodes": ["80201", "80012", "80226", "80229", "80031"]
+  },
+  "phoenix": {
+    "cities": ["phoenix", "mesa", "chandler", "glendale", "scottsdale"],
+    "zipcodes": ["85001", "85201", "85224", "85301", "85251"]
+  },
+  "philadelphia": {
+    "cities": ["philadelphia", "camden", "cherry hill", "norristown", "bensalem"],
+    "zipcodes": ["19104", "08102", "08002", "19401", "19020"]
+  },
+  "minneapolis": {
+    "cities": ["minneapolis", "st paul", "bloomington", "eden prairie", "maple grove"],
+    "zipcodes": ["55401", "55101", "55425", "55344", "55369"]
+  },
+  "detroit": {
+    "cities": ["detroit", "dearborn", "livonia", "troy", "southfield"],
+    "zipcodes": ["48201", "48124", "48150", "48084", "48076"]
+  },
+  "san diego": {
+    "cities": ["san diego", "chula vista", "escondido", "carlsbad", "el cajon"],
+    "zipcodes": ["92101", "91910", "92025", "92008", "92020"]
+  },
+  "las vegas": {
+    "cities": ["las vegas", "henderson", "north las vegas", "boulder city", "paradise"],
+    "zipcodes": ["89101", "89015", "89030", "89005", "89119"]
+  },
+  "washingtondc": {
+    "cities": ["washington", "arlington", "alexandria", "bethesda", "silver spring"],
+    "zipcodes": ["20001", "22201", "22314", "20814", "20910"]
+  }
+}
