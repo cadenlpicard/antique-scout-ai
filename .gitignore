@@ -3,6 +3,11 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# Scraper generated files
+EstateSalesScraper/scraped_sales.json
+EstateSalesScraper/scraped_sales.txt
+EstateSalesScraper/estatesales_debug.html
+
 # C extensions
 *.so
 

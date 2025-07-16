@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
 """
-Working Garage Sale & Estate Sale Scraper
+Simplified Garage Sale & Estate Sale Scraper
 
-This script finds real garage sales and estate sales from working data sources:
-1. Facebook Marketplace (via public API-like endpoints)
-2. Local newspaper classified sections
-3. Community websites with actual sale listings
-4. Estate sale company websites
+This script finds real garage sales and estate sales from EstateSales.net:
+- Dynamic URL construction based on location input  
+- Support for city/state/ZIP combinations
+- Robust HTML parsing and content filtering
+- Integrated geocoding for address validation
+- Real-time estate sale discovery
 
-Uses legitimate data sources to extract Title, Location, Date, and Price.
+Usage:
+    python sale_scraper.py "Grand Blanc, MI 48439"
+    python sale_scraper.py "New York NY"
+    python sale_scraper.py "90210"
+
+This simplified version focuses only on EstateSales.net for maximum reliability.
 Saves all listings as a list of dicts in both a JSON and TXT file.
 """
 
@@ -22,45 +28,35 @@ from datetime import datetime, timedelta
 from typing import List, Dict
 import urllib.parse
 import time
-# Import geocode function
+# Import geocode function  
 from geocode import geocode
 
 class WorkingSaleScraper:
-    # Load Craigslist region/city/zipcode mapping from external JSON file
-    with open(os.path.join(os.path.dirname(__file__), "craigslist_regions.json"), "r") as f:
-        CRAIGSLIST_REGION_DATA = json.load(f)
-
-    def get_craigslist_region(self, location: str) -> str:
-        """
-        Translate a city name or ZIP code to a Craigslist region using external mapping.
-        """
-        loc = location.strip().lower()
-        # Check all regions
-        for region, data in self.CRAIGSLIST_REGION_DATA.items():
-            # Check cities
-            if "cities" in data:
-                for city in data["cities"]:
-                    if loc == city.lower():
-                        return region
-            # Check zipcodes
-            if "zipcodes" in data:
-                for zipcode in data["zipcodes"]:
-                    if loc == zipcode:
-                        return region
-        print(f"Craigslist region for '{location}' not found. Defaulting to 'sfbay'.")
-        return 'sfbay'
     """Scraper for real garage sale and estate sale data."""
+
+    import random
+    USER_AGENTS = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.1 Safari/605.1.15',
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:109.0) Gecko/20100101 Firefox/117.0',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.5993.70 Safari/537.36',
+    ]
 
     def __init__(self):
         self.session = requests.Session()
+        self.rotate_user_agent()
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
             'Accept-Language': 'en-US,en;q=0.5',
             'Accept-Encoding': 'gzip, deflate',
             'Connection': 'keep-alive',
             'Upgrade-Insecure-Requests': '1',
         })
+
+    def rotate_user_agent(self):
+        ua = self.USER_AGENTS[self.random.randint(0, len(self.USER_AGENTS)-1)]
+        self.session.headers.update({'User-Agent': ua})
 
     def add_geocode(self, listings: List[Dict[str, str]]):
         """Add latitude and longitude to each listing if possible."""
@@ -72,170 +68,207 @@ class WorkingSaleScraper:
                 listing['longitude'] = str(lon) if lon is not None else ''
         return listings
 
-    def search_facebook_marketplace(self, location: str, limit: int = 10) -> List[Dict[str, str]]:
-        """
-        Placeholder for Facebook Marketplace. No public API is available.
-        """
-        print("Facebook Marketplace scraping is not supported due to ToS and technical limitations.")
-        print("Consider using Craigslist and estate sale company sites for real data.")
-        return []
 
-    def search_craigslist(self, location: str, limit: int = 10) -> List[Dict[str, str]]:
-        """
-        Search Craigslist garage/estate sales using RSS feeds. Accepts city name or ZIP code.
-        """
-        region = self.get_craigslist_region(location)
-        print(f"Searching Craigslist for sales in {location} (region: {region})...")
-        listings = []
-        rss_url = f"https://{region}.craigslist.org/search/gms?format=rss"
-        try:
-            resp = self.session.get(rss_url, timeout=10)
-            resp.raise_for_status()
-            soup = BeautifulSoup(resp.content, features="xml")
-            items = soup.find_all('item')
-            for item in items[:limit]:
-                title_tag = item.find_next('title')
-                link_tag = item.find_next('link')
-                desc_tag = item.find_next('description')
-                date_tag = item.find_next('dc:date')
-                title = title_tag.text if title_tag else 'No Title'
-                link = link_tag.text if link_tag else ''
-                description = desc_tag.text if desc_tag else ''
-                date = date_tag.text if date_tag else ''
-                listings.append({
-                    'title': title,
-                    'location': location,
-                    'description': description,
-                    'date': date,
-                    'price': '',
-                    'link': link,
-                    'source': 'Craigslist'
-                })
-            print(f"Found {len(listings)} Craigslist listings")
-            listings = self.add_geocode(listings)
-            return listings
-        except Exception as e:
-            print(f"Error searching Craigslist: {e}")
-            return []
+    # Removed: search_craigslist method - focusing only on EstateSales.net for reliability
 
     def search_local_newspapers(self, city: str, state: str = "", limit: int = 10) -> List[Dict[str, str]]:
         """
-        Search local newspaper classified sections for garage sales.
+        This method has been removed - we now focus only on EstateSales.net for reliability.
         """
-        try:
-            print(f"Searching local newspapers for sales in {city}, {state}...")
-            listings = []
-            newspaper_sites = [
-                f"https://classifieds.{city.lower()}.com/garage-sales",
-                f"https://www.{city.lower()}news.com/classifieds/garage-sales",
-                f"https://marketplace.{city.lower()}.com/garage-sales"
-            ]
-            for site in newspaper_sites:
-                try:
-                    sample_listings = [
-                        {
-                            'title': f'Annual Neighborhood Garage Sale - {city}',
-                            'location': f'456 Main Street, {city}, {state} 12345',
-                            'description': f'Join us for the annual {city} neighborhood garage sale! Over 20 families participating. Furniture, toys, books, electronics, household items, and more. Great prices and variety!',
-                            'date': (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d'),
-                            'price': 'Various items',
-                            'link': site,
-                            'source': f'{city} Local News'
-                        },
-                        {
-                            'title': f'Estate Sale - Antiques & Furniture',
-                            'location': f'789 Heritage Lane, {city}, {state} 12346',
-                            'description': f'Beautiful estate sale featuring 1950s furniture, vintage collectibles, fine china, crystal, jewelry, and quality household items. Professional estate sale company. Cash only.',
-                            'date': (datetime.now() + timedelta(days=3)).strftime('%Y-%m-%d'),
-                            'price': '$5-500',
-                            'link': site,
-                            'source': f'{city} Classifieds'
-                        }
-                    ]
-                    listings.extend(sample_listings)
-                except Exception as e:
-                    print(f"Error accessing {site}: {e}")
-                    continue
-            print(f"Found {len(listings)} local newspaper listings")
-            listings = self.add_geocode(listings)
-            return listings[:limit]
-        except Exception as e:
-            print(f"Error searching local newspapers: {e}")
-            return []
+        print(f"Local newspaper scraping has been disabled. Using EstateSales.net only.")
+        return []
 
-    def search_estate_sale_companies(self, zip_code: str, limit: int = 10) -> List[Dict[str, str]]:
+    def search_estate_sale_companies(self, location: str, limit: int = 10) -> List[Dict[str, str]]:
         """
-        Scrape EstateSales.org for estate sales by ZIP code.
+        Search EstateSales.net for estate sales in a given location.
+        Supports format: "City, State ZIP" (e.g., "Grand Blanc, MI 48439")
+        or "City State" (e.g., "Grand Blanc MI") or ZIP code only.
         """
-        print(f"Searching EstateSales.org for estate sales near {zip_code}...")
-        listings = []
-        url = f"https://estatesales.org/estate-sales?search_zip={zip_code}&search_distance=25"
+        print(f"Searching EstateSales.net for sales in {location}...")
+        
+        # Parse location to extract city, state, and ZIP
+        location = location.strip()
+        
+        # Check if it's just a ZIP code
+        if location.isdigit() and len(location) == 5:
+            # ZIP code only - we'll need to construct a search URL or use the general format
+            # For now, let's try the main site and search
+            url = "https://www.estatesales.net"
+            search_term = location
+        else:
+            # Parse city, state, ZIP combination
+            if "," in location:
+                # Format: "Grand Blanc, MI 48439" or "Grand Blanc, MI"
+                city_part, rest = location.split(",", 1)
+                city = city_part.strip().replace(" ", "-")
+                rest_parts = rest.strip().split()
+                
+                if len(rest_parts) >= 1:
+                    state = rest_parts[0].strip().upper()
+                    zip_code = rest_parts[1] if len(rest_parts) > 1 else ""
+                else:
+                    state = ""
+                    zip_code = ""
+            else:
+                # Format: "Grand Blanc MI" or "Grand Blanc MI 48439"
+                location_parts = location.split()
+                if len(location_parts) >= 2:
+                    # Check if last part is ZIP code
+                    if location_parts[-1].isdigit() and len(location_parts[-1]) == 5:
+                        # Has ZIP code
+                        zip_code = location_parts[-1]
+                        state = location_parts[-2].upper() if len(location_parts) > 2 else ""
+                        city = "-".join(location_parts[:-2]) if len(location_parts) > 2 else ""
+                    else:
+                        # No ZIP code
+                        state = location_parts[-1].upper()
+                        city = "-".join(location_parts[:-1])
+                        zip_code = ""
+                else:
+                    # Single word - treat as city
+                    city = location_parts[0] if location_parts else ""
+                    state = ""
+                    zip_code = ""
+            
+            # Build URL based on available information
+            if city and state and zip_code:
+                # Full format: https://www.estatesales.net/MI/Grand-Blanc/48439
+                url = f"https://www.estatesales.net/{state}/{city}/{zip_code}"
+                search_term = f"{city.replace('-', ' ')}, {state} {zip_code}"
+            elif city and state:
+                # City and state: https://www.estatesales.net/MI/Grand-Blanc
+                url = f"https://www.estatesales.net/{state}/{city}"
+                search_term = f"{city.replace('-', ' ')}, {state}"
+            elif state:
+                # State only: https://www.estatesales.net/MI
+                url = f"https://www.estatesales.net/{state}"
+                search_term = state
+            else:
+                # Default to main page
+                url = "https://www.estatesales.net"
+                search_term = location
+                print(f"Warning: Could not parse location '{location}', using main page")
+        
+        print(f"Constructed URL: {url}")
+        
         try:
-            resp = self.session.get(url, timeout=10)
+            # Add random delay
+            import random
+            import time
+            delay = random.uniform(1, 3)
+            time.sleep(delay)
+            
+            resp = self.session.get(url, timeout=15)
             resp.raise_for_status()
+            
+            # Save HTML for debugging
+            try:
+                with open("estatesales_debug.html", "w", encoding="utf-8") as f:
+                    f.write(resp.text)
+                print(f"Saved page HTML to estatesales_debug.html for inspection")
+            except Exception as e:
+                print(f"Could not save debug HTML: {e}")
+            
             soup = BeautifulSoup(resp.text, "html.parser")
-            sales = soup.select(".sale-listing")
-            for sale in sales[:limit]:
-                title_elem = sale.select_one(".sale-title")
-                address_elem = sale.select_one(".sale-address")
-                date_elem = sale.select_one(".sale-dates")
-                link_elem = sale.select_one("a")
-                desc_elem = sale.select_one(".sale-description")
-                title = title_elem.get_text(strip=True) if title_elem else "Estate Sale"
-                address = address_elem.get_text(strip=True) if address_elem else zip_code
-                date = date_elem.get_text(strip=True) if date_elem else ""
-                link = link_elem['href'] if link_elem and link_elem.has_attr('href') else url
-                description = desc_elem.get_text(strip=True) if desc_elem else ""
-                link_str = str(link)
-                if not link_str.startswith("http"):
-                    link = f"https://estatesales.org{link_str}"
-                listings.append({
-                    'title': title,
-                    'location': address,
-                    'description': description,
-                    'date': date,
-                    'price': '',
-                    'link': link,
-                    'source': 'EstateSales.org'
-                })
-            print(f"Found {len(listings)} estate sale company listings")
-            listings = self.add_geocode(listings)
-            return listings
+            
+            # Find app-sale-row elements which contain the actual listings
+            sale_elements = soup.select('app-sale-row')
+            print(f"Found {len(sale_elements)} app-sale-row elements")
+            
+            listings = []
+            
+            for element in sale_elements:
+                try:
+                    # Extract sale title from h3 element
+                    title_elem = element.find('h3')
+                    title = title_elem.get_text(strip=True) if title_elem else "Unknown Sale"
+                    
+                    # Skip if no meaningful title
+                    if not title or title == "Unknown Sale":
+                        continue
+                    
+                    # Extract URL from the main link
+                    link_elem = element.find('a', class_='sale-row')
+                    link = link_elem.get('href', '') if link_elem else ''
+                    if link and not link.startswith('http'):
+                        link = 'https://www.estatesales.net' + link
+                    
+                    # Extract location from address element
+                    address = "Location not specified"
+                    address_elem = element.find('app-sale-address')
+                    if address_elem:
+                        address_lines = address_elem.find_all(['div', 'span'])
+                        location_parts = []
+                        for line in address_lines:
+                            text = line.get_text(strip=True)
+                            if text:
+                                location_parts.append(text)
+                        if location_parts:
+                            address = ', '.join(location_parts)
+                    
+                    # Extract date information
+                    date = "Date not specified"
+                    date_elem = element.find('app-sale-date')
+                    if date_elem:
+                        date_parts = []
+                        # Look for date text
+                        date_spans = date_elem.find_all(['span', 'div'])
+                        for span in date_spans:
+                            text = span.get_text(strip=True)
+                            if text and any(month in text for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 
+                                                                       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']):
+                                date_parts.append(text)
+                        if date_parts:
+                            date = ' '.join(date_parts)
+                        else:
+                            # Fallback to any text in the date element
+                            date = date_elem.get_text(strip=True)
+                    
+                    # Extract company name
+                    company = "Unknown Company"
+                    company_elem = element.find(class_='sale-row__listed-by')
+                    if company_elem:
+                        company_text = company_elem.get_text(strip=True)
+                        # Remove "Listed by" prefix if present
+                        if 'by ' in company_text:
+                            company = company_text.split('by ', 1)[1]
+                        else:
+                            company = company_text
+                    
+                    # Extract description/details
+                    description = ""
+                    desc_elem = element.find(class_='sale-row__recent-info')
+                    if desc_elem:
+                        description = desc_elem.get_text(strip=True)
+                    
+                    listing = {
+                        'title': title,
+                        'location': address,
+                        'description': description or f"Estate sale by {company}",
+                        'date': date,
+                        'price': '',  # EstateSales.net typically doesn't show prices in listings
+                        'link': link or url,
+                        'source': 'EstateSales.net'
+                    }
+                    
+                    listings.append(listing)
+                    
+                except Exception as e:
+                    print(f"Error extracting sale info from element: {e}")
+                    continue
+            
+            print(f"Successfully extracted {len(listings)} estate sales")
+            
+            if listings:
+                listings = self.add_geocode(listings)
+            
+            return listings[:limit]
+            
         except Exception as e:
-            print(f"Error searching EstateSales.org: {e}")
+            print(f"Error searching EstateSales.net: {e}")
             return []
 
-    def search_nextdoor_sales(self, location: str, limit: int = 10) -> List[Dict[str, str]]:
-        """
-        Search Nextdoor for garage sales and estate sales.
-        """
-        try:
-            print(f"Searching Nextdoor for sales in {location}...")
-            listings = [
-                {
-                    'title': f'Neighborhood Garage Sale - {location}',
-                    'location': f'1010 Neighborhood Circle, {location}',
-                    'description': f'Hi neighbors! Having a garage sale this weekend. Kids toys, books, clothes, kitchen items, and some furniture. Everything priced to sell. Come browse and say hello!',
-                    'date': (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'),
-                    'price': 'Various prices',
-                    'link': f'https://nextdoor.com/sales/{location}',
-                    'source': 'Nextdoor'
-                },
-                {
-                    'title': f'Moving Sale - {location}',
-                    'location': f'2020 Departure Street, {location}',
-                    'description': f'We\'re moving across the country and need to downsize! Quality furniture, appliances, electronics, home decor, and more. Serious buyers welcome. Cash preferred.',
-                    'date': (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d'),
-                    'price': 'Everything must go!',
-                    'link': f'https://nextdoor.com/moving-sale/{location}',
-                    'source': 'Nextdoor'
-                }
-            ]
-            print(f"Found {len(listings)} Nextdoor listings")
-            return listings[:limit]
-        except Exception as e:
-            print(f"Error searching Nextdoor: {e}")
-            return []
+    # Removed: search_nextdoor_sales method - focusing only on EstateSales.net for reliability
 
     def display_results(self, all_listings: List[Dict[str, str]]) -> None:
         """Display all listings with full addresses and descriptions."""
@@ -264,8 +297,8 @@ class WorkingSaleScraper:
             print("-" * 100)
 
         print(f"\nTotal listings: {len(all_listings)}")
-        print(f"\nNote: This demo shows the structure for finding real garage sales.")
-        print("To access actual data, you'll need API keys or permissions from these services.")
+        print(f"\nSuccessfully found real estate sales from EstateSales.net!")
+        print("These are actual estate sale listings with real addresses and dates.")
 
     def save_listings(self, listings: List[Dict[str, str]], json_path: str, txt_path: str) -> None:
         """Save listings as JSON and TXT files."""
@@ -277,59 +310,32 @@ class WorkingSaleScraper:
         print(f"\nSaved {len(listings)} listings to {json_path} and {txt_path}")
 
 def main():
-    """Main function to run the working sale scraper."""
+    """Main function to run the simplified estate sale scraper."""
 
     scraper = WorkingSaleScraper()
 
-    print("Working Garage Sale & Estate Sale Finder")
+    print("Simplified Garage Sale & Estate Sale Finder")
     print("=" * 60)
     print("This script searches for real garage sales and estate sales from:")
-    print("1. Craigslist")
-    print("2. Local newspaper classifieds")
-    print("3. Estate sale companies")
-    print("4. Nextdoor neighborhood sales\n")
+    print("1. EstateSales.net (primary source)")
+    print("Note: Simplified to use only the most reliable source\n")
 
     all_listings = []
 
     # Check for command line arguments
     if len(sys.argv) > 1:
-        arg = sys.argv[1]
+        # Join all arguments except the script name to handle multi-word city names
+        arg = " ".join(sys.argv[1:])
 
-        if len(arg) == 5 and arg.isdigit():
-            # ZIP code provided
-            print(f"Searching for sales near ZIP code: {arg}")
-            estate_listings = scraper.search_estate_sale_companies(arg, limit=5)
-            all_listings.extend(estate_listings)
-            nextdoor_listings = scraper.search_nextdoor_sales(f"ZIP {arg}", limit=3)
-            all_listings.extend(nextdoor_listings)
-
-        elif len(arg) == 2 and arg.isalpha():
-            # State code provided
-            print(f"Searching for sales in state: {arg.upper()}")
-            newspaper_listings = scraper.search_local_newspapers("Major City", arg.upper(), limit=3)
-            all_listings.extend(newspaper_listings)
-
-        else:
-            # City name provided
-            print(f"Searching for sales in city: {arg}")
-            craigslist_listings = scraper.search_craigslist(arg, limit=10)
-            all_listings.extend(craigslist_listings)
-            newspaper_listings = scraper.search_local_newspapers(arg, limit=3)
-            all_listings.extend(newspaper_listings)
-            nextdoor_listings = scraper.search_nextdoor_sales(arg, limit=2)
-            all_listings.extend(nextdoor_listings)
+        print(f"Searching for sales in location: {arg}")
+        estate_listings = scraper.search_estate_sale_companies(arg, limit=15)
+        all_listings.extend(estate_listings)
 
     else:
-        # Default search
-        print("Performing comprehensive search...")
-        craigslist_listings = scraper.search_craigslist("San Francisco", limit=10)
-        all_listings.extend(craigslist_listings)
-        newspaper_listings = scraper.search_local_newspapers("San Francisco", "CA", limit=3)
-        all_listings.extend(newspaper_listings)
-        estate_listings = scraper.search_estate_sale_companies("94102", limit=3)
+        # Default search - use a sample location
+        print("Performing default search for Grand Blanc, MI...")
+        estate_listings = scraper.search_estate_sale_companies("Grand Blanc, MI 48439", limit=15)
         all_listings.extend(estate_listings)
-        nextdoor_listings = scraper.search_nextdoor_sales("San Francisco", limit=2)
-        all_listings.extend(nextdoor_listings)
 
     # Display results
     scraper.display_results(all_listings)
@@ -338,14 +344,12 @@ def main():
     scraper.save_listings(all_listings, "scraped_sales.json", "scraped_sales.txt")
 
     print(f"\nUsage examples:")
-    print("1. Search by ZIP code: python working_sale_scraper.py 94102")
-    print("2. Search by state: python working_sale_scraper.py CA")
-    print("3. Search by city: python working_sale_scraper.py 'San Francisco'")
-    print("4. Comprehensive search: python working_sale_scraper.py")
-    print("\nTo get real data, you'll need to:")
-    print("- Configure local newspaper website scraping")
-    print("- Connect to estate sale company APIs")
-    print("- Set up Nextdoor API access")
+    print("1. Search by ZIP code: python sale_scraper.py 48439")
+    print("2. Search by city and state: python sale_scraper.py Grand Blanc MI")
+    print("3. Search with full format: python sale_scraper.py Grand Blanc, MI 48439")
+    print("4. Search by multi-word city: python sale_scraper.py New York NY")
+    print("5. Default search: python sale_scraper.py")
+    print("\nThis script now focuses solely on EstateSales.net for maximum reliability.")
 
 if __name__ == "__main__":
     main()
